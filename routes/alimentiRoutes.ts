@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import Alimento from '../models/Alimenti';
 import Ordine from '../models/Ordini';
-import { StateMachine, OrdineStato } from '../utils/stateMachine';
+import { StateMachine, OrdineStato } from '../utils/StateMachine';
 
 const router = express.Router();
 
@@ -126,5 +126,92 @@ router.put('/ordini/:id/stato', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Errore nell\'aggiornamento dello stato dell\'ordine.' });
   }
 });
+
+// Rotta per segnalare che un ordine è stato preso in carico
+router.put('/ordini/:id/preso-in-carico', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const ordine = await Ordine.findByPk(id);
+    if (!ordine) {
+      return res.status(404).json({ error: 'Ordine non trovato.' });
+    }
+
+    const stateMachine = new StateMachine();
+    if (stateMachine.transizioneVerso(OrdineStato.IN_ESECUZIONE)) {
+      ordine.stato = stateMachine.getStatoCorrente();
+      await ordine.save();
+      return res.status(200).json(ordine);
+    } else {
+      return res.status(400).json({ error: 'Transizione di stato non valida.' });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore nell\'aggiornamento dello stato dell\'ordine.' });
+  }
+});
+
+// Rotta per segnalare il carico di un determinato peso di un alimento
+router.post('/carico-alimenti', async (req: Request, res: Response) => {
+  const { alimentoId, peso } = req.body;
+
+  try {
+    const alimento = await Alimento.findByPk(alimentoId);
+    if (!alimento) {
+      return res.status(404).json({ error: 'Alimento non trovato.' });
+    }
+
+    // Verifica che l'ordine sia ancora in uno stato valido
+    const ordine = await Ordine.findOne({ where: { stato: OrdineStato.IN_ESECUZIONE } });
+    if (!ordine) {
+      return res.status(400).json({ error: 'Nessun ordine in esecuzione.' });
+    }
+
+    // Registra il timestamp
+    const timestamp = new Date();
+    alimento.updated_at = timestamp;
+    alimento.quantita_disponibile += peso;
+    await alimento.save();
+
+    // Verifica la sequenza di carico
+    const alimentiOrdine = await ordine.getAlimenti();
+    const indiceAlimentoCorrente = alimentiOrdine.findIndex((a) => a.id === alimento.id);
+    if (indiceAlimentoCorrente === -1) {
+      // L'alimento non fa parte dell'ordine corrente
+      await ordine.update({ stato: OrdineStato.FALLITO });
+      return res.status(400).json({ error: 'Sequenza di carico non rispettata. Ordine annullato.' });
+    }
+
+    // Verifica le quantità caricate rispetto al valore richiesto
+    const percentualeDeviazionePermitita = parseFloat(process.env.PERCENTUALE_DEVIATA || '5'); // Modifica il valore di default
+    const quantitaRichiesta = alimentiOrdine[indiceAlimentoCorrente].quantita;
+    const quantitaCaricata = alimento.quantita_disponibile;
+    const deviazionePercentuale = Math.abs(((quantitaCaricata - quantitaRichiesta) / quantitaRichiesta) * 100);
+
+    if (deviazionePercentuale > percentualeDeviazionePermitita) {
+      // Quantità caricate deviate rispetto al valore richiesto
+      await ordine.update({ stato: OrdineStato.FALLITO });
+      return res.status(400).json({
+        error: `Deviazione percentuale troppo elevata (${deviazionePercentuale}%). Ordine annullato.`,
+      });
+    }
+
+    // Verifica se l'ordine è COMPLETATO
+    const ordineCompletato = alimentiOrdine.every((a, index) => {
+      return index <= indiceAlimentoCorrente ? a.quantita === a.quantita_caricata : a.quantita_caricata === a.quantita;
+    });
+
+    if (ordineCompletato) {
+      await ordine.update({ stato: OrdineStato.COMPLETATO });
+      return res.status(200).json({ message: 'Ordine completato con successo.' });
+    }
+
+    return res.status(200).json({ message: 'Carico dell\'alimento registrato con successo.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore nell\'aggiornamento delle quantità disponibili dell\'alimento.' });
+  }
+});
+
 
 export default router;

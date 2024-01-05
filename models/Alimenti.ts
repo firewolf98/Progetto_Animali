@@ -8,6 +8,7 @@ class Alimento extends Model {
   public quantita_disponibile!: number;
   public created_at!: Date;
   public updated_at!: Date;
+  public quantita_caricata!: number;
 }
 
 Alimento.init(
@@ -38,6 +39,10 @@ Alimento.init(
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW,
+    },
+    quantita_caricata: { 
+      type: DataTypes.INTEGER,
+      allowNull: true, 
     },
   },
   {
