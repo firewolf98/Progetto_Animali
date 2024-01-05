@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import Alimento from '../models/Alimenti';
 import Ordine from '../models/Ordini';
+import { StateMachine, OrdineStato } from '../utils/stateMachine';
 
 const router = express.Router();
 
@@ -98,6 +99,31 @@ router.post('/ordini', async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Errore nella creazione dell\'ordine.' });
+  }
+});
+
+// Rotta per aggiornare lo stato di un ordine
+router.put('/ordini/:id/stato', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { statoDestinazione } = req.body;
+
+  try {
+    const ordine = await Ordine.findByPk(id);
+    if (!ordine) {
+      return res.status(404).json({ error: 'Ordine non trovato.' });
+    }
+
+    const stateMachine = new StateMachine();
+    if (stateMachine.transizioneVerso(statoDestinazione as OrdineStato)) {
+      ordine.stato = stateMachine.getStatoCorrente();
+      await ordine.save();
+      return res.status(200).json(ordine);
+    } else {
+      return res.status(400).json({ error: 'Transizione di stato non valida.' });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore nell\'aggiornamento dello stato dell\'ordine.' });
   }
 });
 
