@@ -1,6 +1,9 @@
 import { DataTypes, Model } from 'sequelize';
-import sequelize from '../config/database';
+import Database from '../config/database';
 import Alimento from './Alimenti'; 
+
+const databaseInstance = Database.getInstance();
+const sequelize = databaseInstance.getSequelize();
 
 
 class Operazione extends Model {

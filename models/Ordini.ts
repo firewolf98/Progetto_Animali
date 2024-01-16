@@ -1,6 +1,9 @@
 import { DataTypes, Model, HasManyGetAssociationsMixin} from 'sequelize';
-import sequelize from '../config/database';
+import Database from '../config/database';
 import Alimento from './Alimenti';
+
+const databaseInstance = Database.getInstance();
+const sequelize = databaseInstance.getSequelize();
 
 class Ordine extends Model {
   public id!: number;
