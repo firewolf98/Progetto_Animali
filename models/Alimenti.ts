@@ -1,5 +1,6 @@
 import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/database';
+import Operazione from './Operazioni';
 
 class Alimento extends Model {
   public id!: number;
@@ -9,6 +10,8 @@ class Alimento extends Model {
   public created_at!: Date;
   public updated_at!: Date;
   public quantita_caricata!: number;
+
+  public operazioni!: Operazione[];
 }
 
 Alimento.init(
@@ -50,5 +53,7 @@ Alimento.init(
     sequelize,
   }
 );
+
+Alimento.hasMany(Operazione, { foreignKey: 'alimento_id', as: 'operazioni' });
 
 export default Alimento;

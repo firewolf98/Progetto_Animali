@@ -1,6 +1,10 @@
 import express, { Request, Response } from 'express';
 import Alimento from '../models/Alimenti';
 import Ordine from '../models/Ordini';
+import Operazione from '../models/Operazioni'; 
+import { Op } from 'sequelize';
+
+
 import { StateMachine, OrdineStato } from '../utils/StateMachine';
 
 const router = express.Router();
@@ -212,6 +216,145 @@ router.post('/carico-alimenti', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Errore nell\'aggiornamento delle quantità disponibili dell\'alimento.' });
   }
 });
+
+// Rotta per ottenere lo stato di un ordine
+router.get('/ordine/:id/stato', async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+
+    // Trova l'ordine e i relativi alimenti
+    const ordine = await Ordine.findByPk(orderId, {
+      include: [{ model: Alimento, as: 'alimenti' }],
+    });
+
+    if (!ordine) {
+      return res.status(404).json({ error: 'Ordine non trovato' });
+    }
+
+    const ordineConAlimenti = ordine as Ordine & { alimenti: Alimento[] };
+
+    // Crea un'istanza di StateMachine
+    const stateMachine = new StateMachine();
+
+    // Verifica lo stato dell'ordine
+    const statoOrdine = stateMachine.getStatoCorrente();
+
+    if (statoOrdine === OrdineStato.COMPLETATO) {
+      // Calcola lo scostamento e il tempo richiesto per ogni alimento
+      const risultatiAlimenti = await Promise.all(
+        ordineConAlimenti.alimenti.map(async (alimento) => {
+          const scostamento = alimento.quantita_caricata - alimento.quantita;
+          const tempoRichiesto = (alimento.updated_at as Date).getTime() - (alimento.created_at as Date).getTime();
+
+
+    
+          return {
+            alimentoId: alimento.id,
+            nome: alimento.nome,
+            scostamento,
+            tempoRichiesto,
+          };
+        })
+      );
+
+      // Esegui la transizione dello stato se necessario
+      const transizioneRiuscita = stateMachine.transizioneVerso(OrdineStato.COMPLETATO); 
+
+      // Invia la risposta con i risultati
+      return res.json({
+        stato: statoOrdine,
+        risultatiAlimenti,
+        transizioneRiuscita,
+      });
+    } else {
+      // Se l'ordine non è completato, invia solo lo stato
+      return res.json({
+        stato: statoOrdine,
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
+// Rotta per elencare operazioni di carico/scarico di un dato alimento in un periodo di riferimento
+router.get('/alimenti/:alimentoId/operazioni', async (req: Request, res: Response) => {
+  try {
+    // Estrai i parametri dalla richiesta
+    const alimentoId = parseInt(req.params.alimentoId, 10);
+    const dataInizio = new Date(req.query.dataInizio as string);
+    const dataFine = new Date(req.query.dataFine as string);
+
+    // Trova l'alimento e le relative operazioni in base alle date
+    const alimento = await Alimento.findByPk(alimentoId, {
+      include: [{ model: Operazione, as: 'operazioni', where: { timestamp: { [Op.between]: [dataInizio, dataFine] } } }],
+    });
+
+    if (!alimento) {
+      return res.status(404).json({ error: 'Alimento non trovato' });
+    }
+
+    // Invia la risposta con le operazioni dell'alimento nel periodo specificato
+    return res.json({
+      alimentoId: alimento.id,
+      nome: alimento.nome,
+      operazioni: alimento.operazioni,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
+// Rotta per ottenere lo stato di tutti gli ordini con filtri
+router.get('/ordini', async (req: Request, res: Response) => {
+  try {
+    // Definisci i filtri opzionali
+    const { dataDa, dataA, alimenti } = req.query;
+
+    // Converti i valori delle date in oggetti Date validi
+    const filtroData: any = {};
+    if (dataDa) {
+      const dataDaString = Array.isArray(dataDa) ? (dataDa[0] as string) : (dataDa as string);
+      filtroData[Op.gte] = new Date(dataDaString);
+    }
+    if (dataA) {
+      const dataAString = Array.isArray(dataA) ? (dataA[0] as string) : (dataA as string);
+      filtroData[Op.lte] = new Date(dataAString);
+    }
+
+
+
+    // Costruisci il filtro per gli alimenti
+    const filtroAlimenti: any = {};
+    if (alimenti) {
+      filtroAlimenti.id = Array.isArray(alimenti) ? { [Op.in]: alimenti } : alimenti;
+    }
+
+    // Esegui la query utilizzando i filtri
+    const ordini = await Ordine.findAll({
+      where: {
+        created_at: filtroData,
+      },
+      include: [
+        {
+          model: Alimento,
+          as: 'alimenti',
+          where: filtroAlimenti,
+          required: alimenti ? true : false, // Se sono specificati alimenti, richiedi la corrispondenza
+        },
+      ],
+    });
+
+    // Invia la risposta con gli ordini filtrati
+    return res.json({ ordini });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Errore interno del server' });
+  }
+});
+
 
 
 export default router;
