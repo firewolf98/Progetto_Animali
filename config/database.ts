@@ -6,11 +6,11 @@ class Database {
 
   private constructor() {
     this.sequelize = new Sequelize({
-      database: 'nome_del_tuo_database',
-      username: 'il_tuo_utente',
-      password: 'la_tua_password',
-      host: 'localhost', 
-      dialect: 'mysql', 
+      dialect: 'mysql',
+      host: '3306',
+      username: 'root@localhost',
+      password: 'AvanzataProgram2024?',
+      database: 'prova'
     });
   }
 
