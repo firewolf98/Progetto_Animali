@@ -3,6 +3,8 @@ import Alimento from '../models/Alimenti';
 import Ordine from '../models/Ordini';
 import Operazione from '../models/Operazioni'; 
 import { Op } from 'sequelize';
+import { ErrorFactory, DatabaseError } from '../utils/ErrorFactory';
+
 
 
 import { StateMachine, OrdineStato } from '../utils/StateMachine';
@@ -16,7 +18,12 @@ router.get('/alimenti', async (req: Request, res: Response) => {
     return res.status(200).json(alimenti);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nel recupero degli alimenti.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nel recupero degli alimenti.');
+    if (error instanceof DatabaseError) {
+      return res.status(500).json({ error: databaseError.message });
+    } else {
+      return res.status(500).json({ error: 'Errore interno del server.' });
+    }
   }
 });
 
@@ -29,7 +36,8 @@ router.post('/alimenti', async (req: Request, res: Response) => {
     return res.status(201).json(nuovoAlimento);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nella creazione del nuovo alimento.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nella creazione del nuovo alimento.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -51,7 +59,8 @@ router.put('/alimenti/:id', async (req: Request, res: Response) => {
     return res.status(200).json(alimento);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nell\'aggiornamento dell\'alimento.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nell\'aggiornamento dell\'alimento.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -70,7 +79,8 @@ router.delete('/alimenti/:id', async (req: Request, res: Response) => {
     return res.status(204).send();
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nell\'eliminazione dell\'alimento.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nell\'eliminazione dell\'alimento.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -83,7 +93,8 @@ router.post('/ordini', async (req: Request, res: Response) => {
     for (const { id, quantita } of alimenti) {
       const alimento = await Alimento.findByPk(id);
       if (!alimento || alimento.quantita_disponibile < quantita) {
-        return res.status(400).json({ error: 'Quantità non disponibile per uno o più alimenti.' });
+        const databaseError = ErrorFactory.createDatabaseError('Quantità non disponibile per uno o più alimenti.');
+        return res.status(400).json({ error: databaseError.message });
       }
     }
 
@@ -102,7 +113,8 @@ router.post('/ordini', async (req: Request, res: Response) => {
     return res.status(201).json(nuovoOrdine);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nella creazione dell\'ordine.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nella creazione dell\'ordine.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -114,7 +126,8 @@ router.put('/ordini/:id/stato', async (req: Request, res: Response) => {
   try {
     const ordine = await Ordine.findByPk(id);
     if (!ordine) {
-      return res.status(404).json({ error: 'Ordine non trovato.' });
+      const databaseError = ErrorFactory.createDatabaseError('Ordine non trovato.');
+      return res.status(404).json({ error: databaseError.message });
     }
 
     const stateMachine = new StateMachine();
@@ -123,11 +136,13 @@ router.put('/ordini/:id/stato', async (req: Request, res: Response) => {
       await ordine.save();
       return res.status(200).json(ordine);
     } else {
-      return res.status(400).json({ error: 'Transizione di stato non valida.' });
+      const databaseError = ErrorFactory.createDatabaseError('Transizione di stato non valida.');
+      return res.status(400).json({ error: databaseError.message });
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nell\'aggiornamento dello stato dell\'ordine.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nell\'aggiornamento dello stato dell\'ordine.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -138,7 +153,8 @@ router.put('/ordini/:id/preso-in-carico', async (req: Request, res: Response) =>
   try {
     const ordine = await Ordine.findByPk(id);
     if (!ordine) {
-      return res.status(404).json({ error: 'Ordine non trovato.' });
+      const databaseError = ErrorFactory.createDatabaseError('Ordine non trovato.');
+      return res.status(404).json({ error: databaseError.message });
     }
 
     const stateMachine = new StateMachine();
@@ -147,11 +163,13 @@ router.put('/ordini/:id/preso-in-carico', async (req: Request, res: Response) =>
       await ordine.save();
       return res.status(200).json(ordine);
     } else {
-      return res.status(400).json({ error: 'Transizione di stato non valida.' });
+      const databaseError = ErrorFactory.createDatabaseError('Transizione di stato non valida.');
+      return res.status(400).json({ error: databaseError.message });
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nell\'aggiornamento dello stato dell\'ordine.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nell\'aggiornamento dello stato dell\'ordine.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -162,13 +180,15 @@ router.post('/carico-alimenti', async (req: Request, res: Response) => {
   try {
     const alimento = await Alimento.findByPk(alimentoId);
     if (!alimento) {
-      return res.status(404).json({ error: 'Alimento non trovato.' });
+      const databaseError = ErrorFactory.createDatabaseError('Alimento non trovato.');
+      return res.status(400).json({ error: databaseError.message });
     }
 
     // Verifica che l'ordine sia ancora in uno stato valido
     const ordine = await Ordine.findOne({ where: { stato: OrdineStato.IN_ESECUZIONE } });
     if (!ordine) {
-      return res.status(400).json({ error: 'Nessun ordine in esecuzione.' });
+      const databaseError = ErrorFactory.createDatabaseError('Nessun ordine in esecuzione.');
+      return res.status(400).json({ error: databaseError.message });
     }
 
     // Registra il timestamp
@@ -183,7 +203,8 @@ router.post('/carico-alimenti', async (req: Request, res: Response) => {
     if (indiceAlimentoCorrente === -1) {
       // L'alimento non fa parte dell'ordine corrente
       await ordine.update({ stato: OrdineStato.FALLITO });
-      return res.status(400).json({ error: 'Sequenza di carico non rispettata. Ordine annullato.' });
+      const databaseError = ErrorFactory.createDatabaseError('Sequenza di carico non rispettata. Ordine annullato.');
+      return res.status(400).json({ error: databaseError.message });
     }
 
     // Verifica le quantità caricate rispetto al valore richiesto
@@ -195,9 +216,8 @@ router.post('/carico-alimenti', async (req: Request, res: Response) => {
     if (deviazionePercentuale > percentualeDeviazionePermitita) {
       // Quantità caricate deviate rispetto al valore richiesto
       await ordine.update({ stato: OrdineStato.FALLITO });
-      return res.status(400).json({
-        error: `Deviazione percentuale troppo elevata (${deviazionePercentuale}%). Ordine annullato.`,
-      });
+      const databaseError = ErrorFactory.createDatabaseError(`Deviazione percentuale troppo elevata (${deviazionePercentuale}%). Ordine annullato.`);
+      return res.status(400).json({ error: databaseError.message });
     }
 
     // Verifica se l'ordine è COMPLETATO
@@ -213,7 +233,8 @@ router.post('/carico-alimenti', async (req: Request, res: Response) => {
     return res.status(200).json({ message: 'Carico dell\'alimento registrato con successo.' });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore nell\'aggiornamento delle quantità disponibili dell\'alimento.' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore nell\'aggiornamento delle quantità disponibili dell\'alimento.');
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -228,7 +249,8 @@ router.get('/ordine/:id/stato', async (req: Request, res: Response) => {
     });
 
     if (!ordine) {
-      return res.status(404).json({ error: 'Ordine non trovato' });
+      const databaseError = ErrorFactory.createDatabaseError('Ordine non trovato')
+      return res.status(400).json({ error: databaseError.message });
     }
 
     const ordineConAlimenti = ordine as Ordine & { alimenti: Alimento[] };
@@ -274,7 +296,8 @@ router.get('/ordine/:id/stato', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore interno del server' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore interno del server')
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -292,7 +315,8 @@ router.get('/alimenti/:alimentoId/operazioni', async (req: Request, res: Respons
     });
 
     if (!alimento) {
-      return res.status(404).json({ error: 'Alimento non trovato' });
+      const databaseError = ErrorFactory.createDatabaseError('Alimento non trovato')
+      return res.status(404).json({ error: databaseError.message });
     }
 
     // Invia la risposta con le operazioni dell'alimento nel periodo specificato
@@ -303,7 +327,8 @@ router.get('/alimenti/:alimentoId/operazioni', async (req: Request, res: Respons
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore interno del server' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore interno del server')
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
@@ -351,7 +376,8 @@ router.get('/ordini', async (req: Request, res: Response) => {
     return res.json({ ordini });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Errore interno del server' });
+    const databaseError = ErrorFactory.createDatabaseError('Errore interno del server')
+    return res.status(500).json({ error: databaseError.message });
   }
 });
 
